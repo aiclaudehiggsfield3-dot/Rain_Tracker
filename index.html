@@ -234,8 +234,8 @@ input[type=file]{font:inherit;color:var(--muted)}
       <label class="muted"><input type="checkbox" id="dPublic"> 사이트에 내용 공개 (끄면 내용은 노션과 이 화면의 나에게만 보이고, 사이트에는 "기록함"만 보여요)</label>
       <div class="inline"><button type="button" class="primary" id="dSave">노션에 저장</button></div>
       <div class="msg" id="dMsg" role="status" aria-live="polite"></div>
-      <div id="mediaBox" hidden>
-        <label class="muted" style="display:block;margin:4px 0 8px">이미지·영상 올리기 (노션 페이지에 저장돼요, 파일당 최대 100MB)</label>
+      <div id="mediaBox">
+        <label class="muted" style="display:block;margin:4px 0 8px">이미지·영상 올리기 (노션에 저장돼요, 파일당 최대 100MB) · 파일만 올려도 기록이 자동으로 만들어져요</label>
         <input type="file" id="dFile" accept="image/png,image/jpeg,image/gif,image/webp,video/mp4,video/quicktime,video/webm" multiple>
         <div id="mediaList" class="mediaList"></div>
         <div class="msg" id="uMsg" role="status" aria-live="polite"></div>
@@ -418,7 +418,7 @@ function updDayNo(){
   const str = $('dDate').value; if (!str){ $('dNo').textContent = ''; return 0; }
   const n = dayNoOf(str); $('dNo').textContent = (n >= 1 && n <= 31) ? `D${n}` : `30 Days 기간(${fmt(START)}~${fmt(END)}) 밖의 날짜예요`; return n;
 }
-function clearForm(){ ['dTitle', 'dGood', 'dBad', 'dMood', 'dUrl', 'dPrompt', 'dTool'].forEach(id => $(id).value = ''); $('dPublic').checked = false; CURDAY = 0; renderMedia([]); }
+function clearForm(){ ['dTitle', 'dGood', 'dBad', 'dMood', 'dUrl', 'dPrompt', 'dTool'].forEach(id => $(id).value = ''); $('dPublic').checked = false; CURDAY = 0; SAVEDFOR = 0; renderMedia([]); }
 function fillForm(e){
   if (e.date) $('dDate').value = e.date;
   $('dTitle').value = e.title && e.title !== 'D' + e.day ? e.title : ''; $('dGood').value = e.good || ''; $('dBad').value = e.bad || '';
@@ -428,7 +428,8 @@ function fillForm(e){
 }
 function syncForm(){
   const n = updDayNo(), ex = (FULLDAYS || []).find(d => d.day === n);
-  if (ex){ fillForm(ex); dMsg(`D${n} 기록을 불러왔어요. 고치고 저장하면 덮어써요.`); } else { clearForm(); dMsg(''); }
+  if (ex){ fillForm(ex); dMsg(`D${n} 기록을 불러왔어요. 고치고 저장하면 덮어써요.`); CURDAY = n; SAVEDFOR = n; refreshMedia(); }
+  else { clearForm(); dMsg(''); }
 }
 async function loadFullDays(){
   if (!API || !UNLOCKED) return;
@@ -440,7 +441,7 @@ async function loadFullDays(){
 }
 function openDay(dt, e){
   $('dayAdmin').open = true; $('dDate').value = localISO(dt);
-  if (e) fillForm(e); else { clearForm(); updDayNo(); }
+  if (e){ fillForm(e); CURDAY = e.day; SAVEDFOR = e.day; refreshMedia(); } else { clearForm(); updDayNo(); }
   dMsg(e ? `D${e.day} 기록을 불러왔어요. 고치고 저장하면 덮어써요.` : ''); $('dform').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 function renderDays(){
@@ -486,25 +487,38 @@ async function loadDayMedia(){
     } catch(e){ box.textContent = '미디어를 불러오지 못했어요.'; }
   }
 }
+function currentDayFields(){
+  const str = $('dDate').value, n = str ? dayNoOf(str) : 0;
+  return { str, n, good: $('dGood').value.trim(), bad: $('dBad').value.trim() };
+}
+// 노션에 오늘 기록을 만들거나 갱신한다. text=false 면 지금 폼에 있는 내용 그대로 조용히 저장만 한다(파일 업로드 전 자동 생성용).
+async function saveDay(silent){
+  const { str, n, good, bad } = currentDayFields();
+  if (!str || n < 1 || n > 31){ dMsg(`날짜가 30 Days 기간(${fmt(START)}~${fmt(END)})이 아니에요.`, 'err'); return null; }
+  if (!silent) dMsg('노션에 저장하는 중…');
+  const r = await api('daySave', { day: n, date: str, title: $('dTitle').value, good, bad, mood: $('dMood').value ? Number($('dMood').value) : null, url: $('dUrl').value, public: $('dPublic').checked, prompt: $('dPrompt').value, tool: $('dTool').value });
+  CURDAY = n; SAVEDFOR = n;
+  if (!silent) dMsg(`D${n} ${r.updated ? '수정' : '저장'}했어요. 노션에도 들어갔어요.`, 'ok');
+  refreshMedia();
+  return n;
+}
 if (API){
-  $('dDate').addEventListener('change', syncForm);
+  $('dDate').addEventListener('change', () => { syncForm(); SAVEDFOR = 0; });
   $('dSave').addEventListener('click', async () => {
-    const str = $('dDate').value, n = str ? dayNoOf(str) : 0;
-    if (!str || n < 1 || n > 31){ dMsg(`날짜가 30 Days 기간(${fmt(START)}~${fmt(END)})이 아니에요.`, 'err'); return; }
-    const good = $('dGood').value.trim(), bad = $('dBad').value.trim();
-    if (!good && !bad){ dMsg('좋았던 경험이나 힘들었던 경험 중 하나는 적어 주세요.', 'err'); return; }
-    $('dSave').disabled = true; dMsg('노션에 저장하는 중…');
-    try {
-      const r = await api('daySave', { day: n, date: str, title: $('dTitle').value, good, bad, mood: $('dMood').value ? Number($('dMood').value) : null, url: $('dUrl').value, public: $('dPublic').checked });
-      dMsg(`D${n} ${r.updated ? '수정' : '저장'}했어요. 노션에도 들어갔어요.`, 'ok');
-      CURDAY = n; $('mediaBox').hidden = false; refreshMedia();
-      await loadFullDays(); await loadState();
-    } catch(e){ dMsg(e.message, 'err'); } finally { $('dSave').disabled = false; }
+    $('dSave').disabled = true;
+    try { await saveDay(false); await loadFullDays(); await loadState(); }
+    catch(e){ dMsg(e.message, 'err'); } finally { $('dSave').disabled = false; }
   });
 }
 
 // ===== 이미지·영상 업로드 =====
-let CURDAY = 0;
+let CURDAY = 0, SAVEDFOR = 0;
+// 파일을 올리기 전에, 이 날짜 기록이 아직 없으면(글이 비어 있어도) 조용히 만들어 둔다.
+async function ensureDayForUpload(){
+  const { n } = currentDayFields();
+  if (SAVEDFOR === n) return n;
+  return await saveDay(true);
+}
 function uMsg(text, kind){ const m = $('uMsg'); if (m){ m.textContent = text || ''; m.className = 'msg' + (kind ? ' ' + kind : ''); } }
 function renderMedia(list){
   const box = $('mediaList'); if (!box) return; box.textContent = '';
@@ -543,7 +557,8 @@ async function uploadOne(file, item){
 if ($('dFile')) $('dFile').addEventListener('change', async () => {
   const files = [...$('dFile').files]; $('dFile').value = '';
   if (!files.length) return;
-  if (!CURDAY){ uMsg('먼저 위에서 오늘 기록을 저장한 뒤에 파일을 올려 주세요.', 'err'); return; }
+  uMsg('기록을 준비하는 중…');
+  try { await ensureDayForUpload(); } catch(e){ uMsg(e.message, 'err'); return; }
   uMsg(`${files.length}개 올리는 중…`);
   for (const file of files){
     const it = el('div', 'mediaItem'); const bar = el('div', 'bar2'); bar.appendChild(el('i')); it.appendChild(bar); $('mediaList').appendChild(it);
