@@ -2,17 +2,17 @@
 // 완료 여부는 data/tracker.js 의 done 배열(id 목록)에 적는다. autoDays 가 있으면 30 Days 업로드 수로 자동 판정.
 window.MILESTONES = [
   { id:"M1", title:"mini project 발표 (4주차)", due:"2026-09-21",
-    note:"수업 체크포인트: mini project 발표 + 생성 클립 5개 + 실패·수정 비교 1쌍 + 30 Days 1일차",
+    note:"수업 체크포인트: mini project 발표 + 생성 클립 5개 + 실패·수정 비교 1쌍",
     tasks:[
       {id:"m1-plan", title:"1분 시나리오·스토리보드·샷 리스트·프롬프트 템플릿"},
       {id:"m1-web", title:"개인 웹사이트 공개 (GitHub Pages URL)"},
       {id:"m1-claude", title:"Claude 세팅 화면: CLAUDE.md / 명령어 / 서브에이전트 / MCP / 스킬"},
       {id:"m1-clips", title:"Higgsfield 생성 클립 5개 (수업 실습에서 만들어도 됨)"},
-      {id:"m1-failfix", title:"실패·수정 비교 1쌍"},
-      {id:"m1-day1", title:"30 Days 1일차 업로드", autoDays:1} ] },
+      {id:"m1-failfix", title:"실패·수정 비교 1쌍"} ] },
   { id:"M2", title:"중간 사전 발표 (5주차)", due:"2026-09-28",
-    note:"발표 자료는 전날(9/27) 저녁 6시까지 구글 드라이브에 업로드",
+    note:"발표 자료는 전날(9/27) 저녁 6시까지 구글 드라이브에 업로드 · 30 Days는 9/28 시작",
     tasks:[
+      {id:"m2-day1", title:"30 Days 1일차 업로드 (9/28 시작)", autoDays:1},
       {id:"m2-upload", title:"발표 자료 구글 드라이브 업로드 (9/27 18:00까지)"},
       {id:"m2-check", title:"로그라인·세계관·콘티·샷 리스트 점검"},
       {id:"m2-share", title:"생성 결과 공유 + 상호 크리틱"},
