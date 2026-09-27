@@ -99,9 +99,23 @@ footer{padding:32px 0 56px;border-top:1px solid var(--line);color:var(--muted);f
   .shot .tag,.kind{font-size:13px}
   button{min-height:44px}
 }
+#gate{display:none;min-height:100vh;align-items:center;justify-content:center;padding:24px}
+body.locked #gate{display:flex}
+body.locked .wrap,body.locked footer{display:none}
+#gate .box{width:100%;max-width:360px;border:1px solid var(--line);background:var(--surface);border-radius:14px;padding:28px 22px}
+#gate h1{font-size:22px;margin:0 0 4px}#gate p{margin:0 0 16px}
+#gate input[type=password]{width:100%;margin:0 0 10px}
+#gate button{width:100%}
 </style>
 </head>
 <body>
+<div id="gate"><form class="box" id="gateForm" onsubmit="return false">
+  <h1>비가 그치기 전까지</h1><p class="muted">입장하려면 비밀번호가 필요해요.</p>
+  <input type="password" id="gpw" placeholder="비밀번호" autocomplete="current-password">
+  <label class="muted" style="display:block;margin:0 0 10px"><input type="checkbox" id="gremember"> 이 기기에서 기억</label>
+  <button type="submit" class="primary" id="gbtn">입장</button>
+  <p class="msg" id="gmsg" style="margin:12px 0 0"></p>
+</form></div>
 <div class="wrap">
 <header>
   <h1>비가 그치기 전까지</h1>
@@ -115,7 +129,7 @@ footer{padding:32px 0 56px;border-top:1px solid var(--line);color:var(--muted);f
 
 <section id="meet"><h2>회의 기록</h2>
   <p class="muted" id="conn"></p>
-  <details class="admin" id="admin" hidden><summary>회의록 작성하기 (비밀번호 필요)</summary>
+  <details class="admin" id="admin" hidden><summary>회의록 작성하기</summary>
     <div class="row" id="lock"><div class="inline"><input type="password" id="pw" placeholder="비밀번호" autocomplete="current-password" style="max-width:220px"><label class="muted"><input type="checkbox" id="remember"> 이 기기에서 기억</label><button type="button" id="unlock">확인</button></div></div>
     <form id="mform" hidden onsubmit="return false">
       <input type="text" id="mTitle" placeholder="회의 제목" maxlength="120">
@@ -145,7 +159,7 @@ footer{padding:32px 0 56px;border-top:1px solid var(--line);color:var(--muted);f
 <section id="fail"><h2>실패와 수정</h2><div id="logBox"></div></section>
 
 <section id="days"><h2>30 Days Project</h2><p class="muted" id="count"></p>
-  <details class="admin" id="dayAdmin" hidden><summary>오늘 기록 쓰기 (비밀번호 필요)</summary>
+  <details class="admin" id="dayAdmin" hidden><summary>오늘 기록 쓰기</summary>
     <div class="row" id="lock2"><div class="inline"><input type="password" id="pw2" placeholder="비밀번호" autocomplete="current-password" style="max-width:220px"><label class="muted"><input type="checkbox" id="remember2"> 이 기기에서 기억</label><button type="button" id="unlock2">확인</button></div></div>
     <form id="dform" hidden onsubmit="return false">
       <div class="inline"><input type="date" id="dDate" style="max-width:180px"><b class="muted" id="dNo"></b></div>
@@ -186,7 +200,8 @@ async function copyText(text, btn){
 
 // ===== 상태(노션 연결 여부에 따라) =====
 const API = ((window.CONFIG && window.CONFIG.API) || '').replace(/\/$/, '');
-let STATE = null, PW = '', UNLOCKED = false, FULLDAYS = null;
+let STATE = null, PW = '', VPW = '', UNLOCKED = false, FULLDAYS = null;
+if (window.CONFIG && window.CONFIG.API) document.body.classList.add('locked'); // 비밀번호를 통과하기 전에는 내용을 숨긴다
 const START = new Date(2026, 8, 28); // 30 Days 시작일(9/28 월). 바꿀 때는 여기만 고치면 된다.
 const DAYS_N = 30;
 const END = new Date(START.getFullYear(), START.getMonth(), START.getDate() + DAYS_N - 1);
@@ -200,11 +215,23 @@ async function api(action, body){
   return data;
 }
 async function loadState(){
-  if (!API){ STATE = null; $('conn').textContent = '정적 모드: data/tracker.js 내용을 보여줍니다. (config.js에 Apps Script 주소를 넣으면 노션과 연결돼요)'; render(); return; }
-  try { STATE = await api('state'); $('conn').textContent = '노션과 연결됨 · 마지막 확인 ' + new Date().toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'}); }
-  catch(e){ STATE = null; $('conn').textContent = '노션에 연결하지 못해 저장된 정적 데이터를 보여줘요. (' + e.message + ')'; }
-  render();
+  if (!API){ STATE = null; $('conn').textContent = '정적 모드: data/tracker.js 내용을 보여줍니다. (config.js에 Apps Script 주소를 넣으면 노션과 연결돼요)'; render(); return true; }
+  try {
+    STATE = await api('state', {});
+    VPW = PW; document.body.classList.remove('locked');
+    $('conn').textContent = '노션과 연결됨 · 마지막 확인 ' + new Date().toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'});
+    if (STATE.admin) setUnlocked(true);
+    render(); return true;
+  } catch(e){
+    STATE = null; document.body.classList.add('locked');
+    $('gmsg').textContent = PW ? e.message : ''; $('gmsg').className = 'msg err'; return false;
+  }
 }
+$('gateForm').addEventListener('submit', async () => {
+  PW = $('gpw').value; $('gbtn').disabled = true; $('gmsg').textContent = '확인 중…'; $('gmsg').className = 'msg';
+  const ok = await loadState(); $('gbtn').disabled = false;
+  if (ok) { try { ($('gremember').checked ? localStorage : sessionStorage).setItem('pw', PW); } catch(e){} $('gpw').value = ''; }
+});
 
 // ===== 체크리스트 + 회의 기록 =====
 function allItems(){
@@ -267,7 +294,7 @@ async function toggle(it, cb){
 function setUnlocked(v){ UNLOCKED = v; $('mform').hidden = !v; $('lock').hidden = v; $('dform').hidden = !v; $('lock2').hidden = v; if (!v) FULLDAYS = null; if (STATE) render(); if (v) loadFullDays(); }
 async function tryUnlock(silent){
   try { await api('auth', {}); try { ($('remember').checked || $('remember2').checked ? localStorage : sessionStorage).setItem('pw', PW); } catch(e){} setUnlocked(true); }
-  catch(e){ if (!silent) alert(e.message); setUnlocked(false); }
+  catch(e){ if (!silent) alert(e.message); PW = VPW; setUnlocked(false); }
 }
 if (API){
   $('admin').hidden = false; $('mDate').value = localISO(new Date());
@@ -276,7 +303,6 @@ if (API){
   $('pw2').addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); PW = $('pw2').value; tryUnlock(false); } });
   $('unlock').addEventListener('click', () => { PW = $('pw').value; tryUnlock(false); });
   $('pw').addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); PW = $('pw').value; tryUnlock(false); } });
-  if (PW) tryUnlock(true);
 }
 const msOpts = () => ['<option value="">마일스톤 없음</option>', ...MS.map(m => `<option value="${m.id}">${m.id} · ${m.due.slice(5)}</option>`)].join('');
 function addTaskRow(t){
@@ -385,7 +411,7 @@ if (API){
     } catch(e){ dMsg(e.message, 'err'); } finally { $('dSave').disabled = false; }
   });
 }
-loadState();
+if (!API || PW) loadState();
 
 // 세계관
 DATA.keywords.forEach(k => $('keywords').appendChild(el('li', null, k)));
