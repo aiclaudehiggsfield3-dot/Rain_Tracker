@@ -66,10 +66,12 @@ button:hover{border-color:var(--amber)}
 table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:left;padding:8px;border-top:1px solid var(--line);vertical-align:top}th{color:var(--muted);font-weight:500}
 .scroll{overflow-x:auto}
 .empty{border:1px dashed var(--line);border-radius:12px;padding:16px;color:var(--muted)}
-.days{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px}
+.days{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,150px),1fr));gap:8px}
 .day{border:1px solid var(--line);border-radius:10px;padding:10px;background:var(--surface);min-height:80px;font-size:13px;color:var(--muted)}
 .day b{display:block;font-family:var(--mono);font-size:12px;margin-bottom:4px}
 .day.done{border-color:var(--amber);color:var(--text)}.day a{color:var(--teal)}
+.day{overflow-wrap:anywhere}.day .pos{color:var(--amber);margin-top:4px}.day .neg{color:#d9968a;margin-top:4px}.day .mood{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:4px}
+.day[role=button]{cursor:pointer}.day[role=button]:hover{border-color:var(--teal)}
 footer{padding:32px 0 56px;border-top:1px solid var(--line);color:var(--muted);font-size:14px}
 :focus-visible{outline:2px solid var(--amber);outline-offset:2px}
 @media (max-width:560px){body{font-size:16px}header{padding:48px 0 28px}dl{grid-template-columns:1fr}dt{border-bottom:0;padding-bottom:0}dd{border-top:0;padding-top:2px}}
@@ -118,7 +120,22 @@ footer{padding:32px 0 56px;border-top:1px solid var(--line);color:var(--muted);f
 
 <section id="fail"><h2>실패와 수정</h2><div id="logBox"></div></section>
 
-<section id="days"><h2>30 Days Project</h2><p class="muted" id="count"></p><div class="days" id="daysGrid"></div></section>
+<section id="days"><h2>30 Days Project</h2><p class="muted" id="count"></p>
+  <details class="admin" id="dayAdmin" hidden><summary>오늘 기록 쓰기 (비밀번호 필요)</summary>
+    <div class="row" id="lock2"><div class="inline"><input type="password" id="pw2" placeholder="비밀번호" autocomplete="current-password" style="max-width:220px"><label class="muted"><input type="checkbox" id="remember2"> 이 기기에서 기억</label><button type="button" id="unlock2">확인</button></div></div>
+    <form id="dform" hidden onsubmit="return false">
+      <div class="inline"><input type="date" id="dDate" style="max-width:180px"><b class="muted" id="dNo"></b></div>
+      <input type="text" id="dTitle" placeholder="한 줄 제목 (비워 두면 D숫자로 저장돼요)" maxlength="120">
+      <textarea id="dGood" rows="4" placeholder="오늘 좋았던 경험 (간단하게)"></textarea>
+      <textarea id="dBad" rows="4" placeholder="오늘 힘들었거나 부정적이었던 경험 (간단하게)"></textarea>
+      <div class="inline"><label class="muted">오늘의 기분 <select id="dMood" style="width:auto"><option value="">선택 안 함</option><option value="1">1 · 많이 힘듦</option><option value="2">2 · 힘든 편</option><option value="3">3 · 보통</option><option value="4">4 · 좋은 편</option><option value="5">5 · 아주 좋음</option></select></label></div>
+      <input type="text" id="dUrl" placeholder="오늘 만든 영상·사진 링크 (선택)">
+      <label class="muted"><input type="checkbox" id="dPublic"> 사이트에 내용 공개 (끄면 내용은 노션과 이 화면의 나에게만 보이고, 사이트에는 "기록함"만 보여요)</label>
+      <div class="inline"><button type="button" class="primary" id="dSave">노션에 저장</button></div>
+      <div class="msg" id="dMsg" role="status" aria-live="polite"></div>
+    </form>
+  </details>
+  <div class="days" id="daysGrid"></div></section>
 </div>
 <footer><div class="wrap">FTM2082-01 · AI 기반 영상 제작 워크샵</div></footer>
 
@@ -135,6 +152,7 @@ const $ = id => document.getElementById(id);
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 const toD = s => { const [y,m,d] = s.split('-').map(Number); return new Date(y, m-1, d); };
 const fmt = d => `${d.getMonth()+1}/${d.getDate()}`;
+const localISO = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 const today = new Date(); today.setHours(0,0,0,0);
 async function copyText(text, btn){
   const old = btn.textContent;
@@ -144,7 +162,9 @@ async function copyText(text, btn){
 
 // ===== 상태(노션 연결 여부에 따라) =====
 const API = ((window.CONFIG && window.CONFIG.API) || '').replace(/\/$/, '');
-let STATE = null, PW = '', UNLOCKED = false;
+let STATE = null, PW = '', UNLOCKED = false, FULLDAYS = null;
+const START = new Date(2026, 8, 21);
+const curDays = () => FULLDAYS || (STATE && Array.isArray(STATE.days) ? STATE.days : DAYS);
 try { PW = sessionStorage.getItem('pw') || localStorage.getItem('pw') || ''; } catch(e){}
 const msgEl = (text, kind) => { const m = $('msg'); m.textContent = text || ''; m.className = 'msg' + (kind ? ' ' + kind : ''); };
 async function api(action, body){
@@ -164,7 +184,7 @@ async function loadState(){
 function allItems(){
   const rows = STATE ? STATE.tasks : [], byKey = {}; rows.filter(r => r.key).forEach(r => byKey[r.key] = r);
   const custom = rows.filter(r => !r.key);
-  const fixedDone = tk => tk.autoDays ? DAYS.length >= tk.autoDays : (byKey[tk.id] ? byKey[tk.id].done : DONE.has(tk.id));
+  const fixedDone = tk => tk.autoDays ? curDays().length >= tk.autoDays : (byKey[tk.id] ? byKey[tk.id].done : DONE.has(tk.id));
   const cards = MS.map(m => ({ m, items: [
     ...m.tasks.map(tk => ({ kind: 'fixed', tk, m, done: fixedDone(tk), row: byKey[tk.id] })),
     ...custom.filter(r => r.milestone === m.id).map(r => ({ kind: 'custom', tk: {id: r.id, title: r.title}, m, done: r.done, row: r, extra: r.due ? fmt(toD(r.due)) : '' })) ] }));
@@ -188,7 +208,7 @@ function render(){
       cb.disabled = !(UNLOCKED && STATE) || !!it.tk.autoDays; cb.setAttribute('aria-label', it.tk.title);
       cb.addEventListener('change', () => toggle(it, cb));
       li.appendChild(cb); li.appendChild(el('span', null, it.tk.title));
-      if (it.tk.autoDays) li.appendChild(el('span', 'extra', `${Math.min(DAYS.length, it.tk.autoDays)}/${it.tk.autoDays}`)); else if (it.extra) li.appendChild(el('span', 'extra', it.extra));
+      if (it.tk.autoDays) li.appendChild(el('span', 'extra', `${Math.min(curDays().length, it.tk.autoDays)}/${it.tk.autoDays}`)); else if (it.extra) li.appendChild(el('span', 'extra', it.extra));
       ul.appendChild(li);
     });
     c.appendChild(ul); $('ms').appendChild(c);
@@ -206,6 +226,7 @@ function render(){
     }
     $('meetings').appendChild(w);
   });
+  renderDays();
 }
 async function toggle(it, cb){
   const want = cb.checked; cb.disabled = true;
@@ -217,13 +238,16 @@ async function toggle(it, cb){
 }
 
 // ===== 관리자(회의록 작성) =====
-function setUnlocked(v){ UNLOCKED = v; $('mform').hidden = !v; $('lock').hidden = v; if (STATE) render(); }
+function setUnlocked(v){ UNLOCKED = v; $('mform').hidden = !v; $('lock').hidden = v; $('dform').hidden = !v; $('lock2').hidden = v; if (!v) FULLDAYS = null; if (STATE) render(); if (v) loadFullDays(); }
 async function tryUnlock(silent){
-  try { await api('auth', {}); try { ($('remember').checked ? localStorage : sessionStorage).setItem('pw', PW); } catch(e){} setUnlocked(true); }
+  try { await api('auth', {}); try { ($('remember').checked || $('remember2').checked ? localStorage : sessionStorage).setItem('pw', PW); } catch(e){} setUnlocked(true); }
   catch(e){ if (!silent) alert(e.message); setUnlocked(false); }
 }
 if (API){
-  $('admin').hidden = false; $('mDate').value = new Date().toISOString().slice(0, 10);
+  $('admin').hidden = false; $('mDate').value = localISO(new Date());
+  $('dayAdmin').hidden = false; $('dDate').value = localISO(new Date()); updDayNo();
+  $('unlock2').addEventListener('click', () => { PW = $('pw2').value; tryUnlock(false); });
+  $('pw2').addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); PW = $('pw2').value; tryUnlock(false); } });
   $('unlock').addEventListener('click', () => { PW = $('pw').value; tryUnlock(false); });
   $('pw').addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); PW = $('pw').value; tryUnlock(false); } });
   if (PW) tryUnlock(true);
@@ -266,6 +290,75 @@ async function save(withPreview){
 }
 $('btnSave').addEventListener('click', () => save(true));
 $('btnSave0').addEventListener('click', () => save(false));
+// ===== 30 Days 기록 =====
+function dayNoOf(str){ return Math.round((toD(str) - START) / 86400000) + 1; }
+function dMsg(text, kind){ const m = $('dMsg'); m.textContent = text || ''; m.className = 'msg' + (kind ? ' ' + kind : ''); }
+function updDayNo(){
+  const str = $('dDate').value; if (!str){ $('dNo').textContent = ''; return 0; }
+  const n = dayNoOf(str); $('dNo').textContent = (n >= 1 && n <= 31) ? `D${n}` : '30 Days 기간(9/21~) 밖의 날짜예요'; return n;
+}
+function clearForm(){ ['dTitle', 'dGood', 'dBad', 'dMood', 'dUrl'].forEach(id => $(id).value = ''); $('dPublic').checked = false; }
+function fillForm(e){
+  if (e.date) $('dDate').value = e.date;
+  $('dTitle').value = e.title && e.title !== 'D' + e.day ? e.title : ''; $('dGood').value = e.good || ''; $('dBad').value = e.bad || '';
+  $('dMood').value = e.mood ? String(e.mood) : ''; $('dUrl').value = e.url || ''; $('dPublic').checked = !!e.public;
+  updDayNo();
+}
+function syncForm(){
+  const n = updDayNo(), ex = (FULLDAYS || []).find(d => d.day === n);
+  if (ex){ fillForm(ex); dMsg(`D${n} 기록을 불러왔어요. 고치고 저장하면 덮어써요.`); } else { clearForm(); dMsg(''); }
+}
+async function loadFullDays(){
+  if (!API || !UNLOCKED) return;
+  try {
+    FULLDAYS = (await api('daysFull', {})).days; render();
+    const n = updDayNo(), ex = FULLDAYS.find(d => d.day === n);
+    if (ex && !$('dGood').value && !$('dBad').value){ fillForm(ex); dMsg(`D${n} 기록을 불러왔어요. 고치고 저장하면 덮어써요.`); }
+  } catch(e){ dMsg(e.message, 'err'); }
+}
+function openDay(dt, e){
+  $('dayAdmin').open = true; $('dDate').value = localISO(dt);
+  if (e) fillForm(e); else { clearForm(); updDayNo(); }
+  dMsg(e ? `D${e.day} 기록을 불러왔어요. 고치고 저장하면 덮어써요.` : ''); $('dform').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+function renderDays(){
+  const list = curDays(), by = {}; list.forEach(d => by[d.day] = d); const grid = $('daysGrid'); grid.textContent = '';
+  $('count').textContent = `9/21 ~ 10/18 · ${list.length} / 28일`;
+  for (let i = 1; i <= 28; i++){
+    const dt = new Date(START); dt.setDate(START.getDate() + i - 1); const e = by[i];
+    const c = el('div', 'day' + (e ? ' done' : '')); c.appendChild(el('b', null, `D${i} · ${fmt(dt)}`));
+    if (e){
+      if (e.title && e.title !== 'D' + i){ if (e.url){ const a = el('a', null, e.title); a.href = e.url; c.appendChild(a); } else c.appendChild(el('span', null, e.title)); }
+      else if (e.url){ const a = el('a', null, '보기'); a.href = e.url; c.appendChild(a); }
+      if (e.good) c.appendChild(el('div', 'pos', '＋ ' + e.good));
+      if (e.bad) c.appendChild(el('div', 'neg', '－ ' + e.bad));
+      if (e.note) c.appendChild(el('div', null, e.note));
+      if (e.mood) c.appendChild(el('div', 'mood', `기분 ${e.mood}/5`));
+      if (e.public === false && !e.good && !e.bad) c.appendChild(el('div', 'mood', '기록함 · 비공개'));
+    }
+    if (UNLOCKED && STATE){
+      c.setAttribute('role', 'button'); c.tabIndex = 0; c.title = e ? '눌러서 고치기' : '눌러서 이 날 기록 쓰기';
+      const open = ev => { if (ev.target.closest && ev.target.closest('a')) return; openDay(dt, e); };
+      c.addEventListener('click', open); c.addEventListener('keydown', ev => { if (ev.key === 'Enter'){ ev.preventDefault(); open(ev); } });
+    }
+    grid.appendChild(c);
+  }
+}
+if (API){
+  $('dDate').addEventListener('change', syncForm);
+  $('dSave').addEventListener('click', async () => {
+    const str = $('dDate').value, n = str ? dayNoOf(str) : 0;
+    if (!str || n < 1 || n > 31){ dMsg('날짜가 30 Days 기간(9/21~)이 아니에요.', 'err'); return; }
+    const good = $('dGood').value.trim(), bad = $('dBad').value.trim();
+    if (!good && !bad){ dMsg('좋았던 경험이나 힘들었던 경험 중 하나는 적어 주세요.', 'err'); return; }
+    $('dSave').disabled = true; dMsg('노션에 저장하는 중…');
+    try {
+      const r = await api('daySave', { day: n, date: str, title: $('dTitle').value, good, bad, mood: $('dMood').value ? Number($('dMood').value) : null, url: $('dUrl').value, public: $('dPublic').checked });
+      dMsg(`D${n} ${r.updated ? '수정' : '저장'}했어요. 노션에도 들어갔어요.`, 'ok');
+      await loadFullDays(); await loadState();
+    } catch(e){ dMsg(e.message, 'err'); } finally { $('dSave').disabled = false; }
+  });
+}
 loadState();
 
 // 세계관
@@ -296,15 +389,7 @@ else {
   t.appendChild(tb); w.appendChild(t); $('logBox').appendChild(w);
 }
 
-// 30 Days
-const start = new Date(2026, 8, 21), by = {}; DAYS.forEach(d => by[d.day] = d);
-$('count').textContent = `9/21 ~ 10/18 · ${DAYS.length} / 28일`;
-for (let i = 1; i <= 28; i++){
-  const dt = new Date(start); dt.setDate(start.getDate() + i - 1); const e = by[i];
-  const c = el('div', 'day' + (e ? ' done' : '')); c.appendChild(el('b', null, `D${i} · ${fmt(dt)}`));
-  if (e){ if (e.url){ const a = el('a', null, e.title || '보기'); a.href = e.url; c.appendChild(a); } else c.appendChild(el('span', null, e.title || '')); if (e.note) c.appendChild(el('div', null, e.note)); }
-  $('daysGrid').appendChild(c);
-}
+renderDays();
 </script>
 </body>
 </html>
