@@ -224,17 +224,16 @@ input[type=file]{font:inherit;color:var(--muted)}
     <form id="dform" onsubmit="return false">
       <div class="inline"><input type="date" id="dDate" style="max-width:180px"><b class="muted" id="dNo"></b></div>
       <div class="inline"><label class="muted">오늘의 기분 <select id="dMood" style="width:auto"><option value="">선택 안 함</option><option value="1">1 · 많이 힘듦</option><option value="2">2 · 힘든 편</option><option value="3">3 · 보통</option><option value="4">4 · 좋은 편</option><option value="5">5 · 아주 좋음</option></select></label></div>
-      <textarea id="dNote" rows="5" placeholder="오늘 좋았던 경험이나 힘들었던 경험 중 하나를 적어주세요."></textarea>
-      <textarea id="dPrompt" rows="4" placeholder="오늘 쓴 프롬프트를 그대로 붙여넣어 주세요."></textarea>
-      <label class="muted"><input type="checkbox" id="dPublic"> 사이트에 내용 공개 (끄면 내용은 노션과 이 화면의 나에게만 보이고, 사이트에는 "기록함"만 보여요)</label>
-      <div class="inline"><button type="button" id="dClose">닫기</button><button type="button" class="primary" id="dSave">노션에 저장</button></div>
-      <div class="msg" id="dMsg" role="status" aria-live="polite"></div>
       <div id="mediaBox">
         <label class="muted" style="display:block;margin:4px 0 8px">이미지·영상 올리기 (노션에 저장돼요, 파일당 최대 100MB) · 파일만 올려도 기록이 자동으로 만들어져요</label>
         <input type="file" id="dFile" accept="image/png,image/jpeg,image/gif,image/webp,video/mp4,video/quicktime,video/webm" multiple>
         <div id="mediaList" class="mediaList"></div>
         <div class="msg" id="uMsg" role="status" aria-live="polite"></div>
       </div>
+      <textarea id="dNote" rows="5" placeholder="오늘 좋았던 경험이나 힘들었던 경험 중 하나를 적어주세요."></textarea>
+      <textarea id="dPrompt" rows="4" placeholder="오늘 쓴 프롬프트를 그대로 붙여넣어 주세요."></textarea>
+      <div class="inline"><button type="button" id="dClose">닫기</button><button type="button" class="primary" id="dSave">노션에 저장</button></div>
+      <div class="msg" id="dMsg" role="status" aria-live="polite"></div>
     </form>
   </div>
   <div class="days" id="daysGrid"></div></section>
@@ -411,10 +410,10 @@ function updDayNo(){
   const str = $('dDate').value; if (!str){ $('dNo').textContent = ''; return 0; }
   const n = dayNoOf(str); $('dNo').textContent = (n >= 1 && n <= 31) ? `D${n}` : `30 Days 기간(${fmt(START)}~${fmt(END)}) 밖의 날짜예요`; return n;
 }
-function clearForm(){ ['dNote', 'dMood', 'dPrompt'].forEach(id => $(id).value = ''); $('dPublic').checked = false; CURDAY = 0; SAVEDFOR = 0; renderMedia([]); }
+function clearForm(){ ['dNote', 'dMood', 'dPrompt'].forEach(id => $(id).value = ''); CURDAY = 0; SAVEDFOR = 0; renderMedia([]); }
 function fillForm(e){
   if (e.date) $('dDate').value = e.date;
-  $('dNote').value = e.good || e.bad || ''; $('dMood').value = e.mood ? String(e.mood) : ''; $('dPublic').checked = !!e.public;
+  $('dNote').value = e.good || e.bad || ''; $('dMood').value = e.mood ? String(e.mood) : '';
   $('dPrompt').value = e.prompt || '';
   updDayNo();
 }
@@ -489,7 +488,7 @@ async function saveDay(silent){
   const { str, n, note } = currentDayFields();
   if (!str || n < 1 || n > 31){ dMsg(`날짜가 30 Days 기간(${fmt(START)}~${fmt(END)})이 아니에요.`, 'err'); return null; }
   if (!silent) dMsg('노션에 저장하는 중…');
-  const r = await api('daySave', { day: n, date: str, title: '', good: note, bad: '', mood: $('dMood').value ? Number($('dMood').value) : null, url: '', public: $('dPublic').checked, prompt: $('dPrompt').value, tool: '' });
+  const r = await api('daySave', { day: n, date: str, title: '', good: note, bad: '', mood: $('dMood').value ? Number($('dMood').value) : null, url: '', public: true, prompt: $('dPrompt').value, tool: '' });
   CURDAY = n; SAVEDFOR = n;
   if (!silent) dMsg(`D${n} ${r.updated ? '수정' : '저장'}했어요. 노션에도 들어갔어요.`, 'ok');
   refreshMedia();
