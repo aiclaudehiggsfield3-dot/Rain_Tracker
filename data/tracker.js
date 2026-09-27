@@ -18,6 +18,6 @@ window.TRACKER = {
   ],
   // 생성 기록(선택): { shot:3, version:"v1", result:"failed", observed:"...", cause:"...", fix:"...", date:"2026-09-23" }  result: adopted | failed | pending
   shotlog: [],
-  // 30 Days: { day:1, date:"2026-09-21", title:"빗소리 스케치", note:"창문 앞 5초", url:"days/day01.mp4" }
+  // 30 Days: { day:1, date:"2026-09-28", title:"빗소리 스케치", note:"창문 앞 5초", url:"days/day01.mp4" }
   days: []
 };

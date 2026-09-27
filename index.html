@@ -163,7 +163,9 @@ async function copyText(text, btn){
 // ===== 상태(노션 연결 여부에 따라) =====
 const API = ((window.CONFIG && window.CONFIG.API) || '').replace(/\/$/, '');
 let STATE = null, PW = '', UNLOCKED = false, FULLDAYS = null;
-const START = new Date(2026, 8, 21);
+const START = new Date(2026, 8, 28); // 30 Days 시작일(9/28 월). 바꿀 때는 여기만 고치면 된다.
+const DAYS_N = 28;
+const END = new Date(START.getFullYear(), START.getMonth(), START.getDate() + DAYS_N - 1);
 const curDays = () => FULLDAYS || (STATE && Array.isArray(STATE.days) ? STATE.days : DAYS);
 try { PW = sessionStorage.getItem('pw') || localStorage.getItem('pw') || ''; } catch(e){}
 const msgEl = (text, kind) => { const m = $('msg'); m.textContent = text || ''; m.className = 'msg' + (kind ? ' ' + kind : ''); };
@@ -245,7 +247,7 @@ async function tryUnlock(silent){
 }
 if (API){
   $('admin').hidden = false; $('mDate').value = localISO(new Date());
-  $('dayAdmin').hidden = false; $('dDate').value = localISO(new Date()); updDayNo();
+  $('dayAdmin').hidden = false; $('dDate').value = localISO(today < START ? START : new Date()); updDayNo();
   $('unlock2').addEventListener('click', () => { PW = $('pw2').value; tryUnlock(false); });
   $('pw2').addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); PW = $('pw2').value; tryUnlock(false); } });
   $('unlock').addEventListener('click', () => { PW = $('pw').value; tryUnlock(false); });
@@ -295,7 +297,7 @@ function dayNoOf(str){ return Math.round((toD(str) - START) / 86400000) + 1; }
 function dMsg(text, kind){ const m = $('dMsg'); m.textContent = text || ''; m.className = 'msg' + (kind ? ' ' + kind : ''); }
 function updDayNo(){
   const str = $('dDate').value; if (!str){ $('dNo').textContent = ''; return 0; }
-  const n = dayNoOf(str); $('dNo').textContent = (n >= 1 && n <= 31) ? `D${n}` : '30 Days 기간(9/21~) 밖의 날짜예요'; return n;
+  const n = dayNoOf(str); $('dNo').textContent = (n >= 1 && n <= 31) ? `D${n}` : `30 Days 기간(${fmt(START)}~${fmt(END)}) 밖의 날짜예요`; return n;
 }
 function clearForm(){ ['dTitle', 'dGood', 'dBad', 'dMood', 'dUrl'].forEach(id => $(id).value = ''); $('dPublic').checked = false; }
 function fillForm(e){
@@ -323,8 +325,8 @@ function openDay(dt, e){
 }
 function renderDays(){
   const list = curDays(), by = {}; list.forEach(d => by[d.day] = d); const grid = $('daysGrid'); grid.textContent = '';
-  $('count').textContent = `9/21 ~ 10/18 · ${list.length} / 28일`;
-  for (let i = 1; i <= 28; i++){
+  $('count').textContent = `${fmt(START)} ~ ${fmt(END)} · ${list.length} / ${DAYS_N}일`;
+  for (let i = 1; i <= DAYS_N; i++){
     const dt = new Date(START); dt.setDate(START.getDate() + i - 1); const e = by[i];
     const c = el('div', 'day' + (e ? ' done' : '')); c.appendChild(el('b', null, `D${i} · ${fmt(dt)}`));
     if (e){
@@ -348,7 +350,7 @@ if (API){
   $('dDate').addEventListener('change', syncForm);
   $('dSave').addEventListener('click', async () => {
     const str = $('dDate').value, n = str ? dayNoOf(str) : 0;
-    if (!str || n < 1 || n > 31){ dMsg('날짜가 30 Days 기간(9/21~)이 아니에요.', 'err'); return; }
+    if (!str || n < 1 || n > 31){ dMsg(`날짜가 30 Days 기간(${fmt(START)}~${fmt(END)})이 아니에요.`, 'err'); return; }
     const good = $('dGood').value.trim(), bad = $('dBad').value.trim();
     if (!good && !bad){ dMsg('좋았던 경험이나 힘들었던 경험 중 하나는 적어 주세요.', 'err'); return; }
     $('dSave').disabled = true; dMsg('노션에 저장하는 중…');

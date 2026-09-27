@@ -37,6 +37,6 @@ window.MILESTONES = [
       {id:"m5-map", title:"최소 기준: 콘티·샷 리스트가 실제 생성 결과와 대응"},
       {id:"m5-t2vi2v", title:"최소 기준: 텍스트 기반·이미지 기반 각 1회 이상 + 차이 설명"},
       {id:"m5-cam", title:"최소 기준: 카메라 움직임 3종 이상 (dolly / pan / tilt / tracking / orbit)"},
-      {id:"m5-days", title:"최소 기준: 30 Days(9/21~10/18) 누적 업로드", autoDays:28},
+      {id:"m5-days", title:"최소 기준: 30 Days(9/28~10/25) 누적 업로드", autoDays:28},
       {id:"m5-talk", title:"발표 준비 (10분 구성)"} ] }
 ];
