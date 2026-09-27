@@ -220,19 +220,14 @@ input[type=file]{font:inherit;color:var(--muted)}
 <section id="fail"><h2>실패와 수정</h2><div id="logBox"></div></section>
 
 <section id="days"><h2>30 Days Project</h2><p class="muted" id="count"></p>
-  <details class="admin" id="dayAdmin" hidden><summary>오늘 기록 쓰기</summary>
-    <div class="row" id="lock2"><div class="inline"><input type="password" id="pw2" placeholder="비밀번호" autocomplete="current-password" style="max-width:220px"><label class="muted"><input type="checkbox" id="remember2"> 이 기기에서 기억</label><button type="button" id="unlock2">확인</button></div></div>
-    <form id="dform" hidden onsubmit="return false">
+  <div class="admin" id="dayAdmin" hidden>
+    <form id="dform" onsubmit="return false">
       <div class="inline"><input type="date" id="dDate" style="max-width:180px"><b class="muted" id="dNo"></b></div>
-      <input type="text" id="dTitle" placeholder="한 줄 제목 (비워 두면 D숫자로 저장돼요)" maxlength="120">
-      <textarea id="dGood" rows="4" placeholder="오늘 좋았던 경험 (간단하게)"></textarea>
-      <textarea id="dBad" rows="4" placeholder="오늘 힘들었거나 부정적이었던 경험 (간단하게)"></textarea>
       <div class="inline"><label class="muted">오늘의 기분 <select id="dMood" style="width:auto"><option value="">선택 안 함</option><option value="1">1 · 많이 힘듦</option><option value="2">2 · 힘든 편</option><option value="3">3 · 보통</option><option value="4">4 · 좋은 편</option><option value="5">5 · 아주 좋음</option></select></label></div>
-      <div class="inline"><input type="text" id="dTool" placeholder="사용한 AI 도구 (예: Higgsfield, Runway)" style="max-width:240px"></div>
+      <textarea id="dNote" rows="5" placeholder="오늘 좋았던 경험이나 힘들었던 경험 중 하나를 적어주세요."></textarea>
       <textarea id="dPrompt" rows="4" placeholder="오늘 쓴 프롬프트를 그대로 붙여넣어 주세요."></textarea>
-      <input type="text" id="dUrl" placeholder="오늘 만든 영상·사진 링크 (선택, 유튜브 등 외부 링크)">
       <label class="muted"><input type="checkbox" id="dPublic"> 사이트에 내용 공개 (끄면 내용은 노션과 이 화면의 나에게만 보이고, 사이트에는 "기록함"만 보여요)</label>
-      <div class="inline"><button type="button" class="primary" id="dSave">노션에 저장</button></div>
+      <div class="inline"><button type="button" id="dClose">닫기</button><button type="button" class="primary" id="dSave">노션에 저장</button></div>
       <div class="msg" id="dMsg" role="status" aria-live="polite"></div>
       <div id="mediaBox">
         <label class="muted" style="display:block;margin:4px 0 8px">이미지·영상 올리기 (노션에 저장돼요, 파일당 최대 100MB) · 파일만 올려도 기록이 자동으로 만들어져요</label>
@@ -241,7 +236,7 @@ input[type=file]{font:inherit;color:var(--muted)}
         <div class="msg" id="uMsg" role="status" aria-live="polite"></div>
       </div>
     </form>
-  </details>
+  </div>
   <div class="days" id="daysGrid"></div></section>
 </div>
 <footer><div class="wrap">FTM2082-01 · AI 기반 영상 제작 워크샵</div></footer>
@@ -360,16 +355,14 @@ async function toggle(it, cb){
 }
 
 // ===== 관리자(회의록 작성) =====
-function setUnlocked(v){ UNLOCKED = v; $('mform').hidden = !v; $('lock').hidden = v; $('dform').hidden = !v; $('lock2').hidden = v; if (!v) FULLDAYS = null; if (STATE) render(); if (v) loadFullDays(); }
+function setUnlocked(v){ UNLOCKED = v; $('mform').hidden = !v; $('lock').hidden = v; if (!v){ $('dayAdmin').hidden = true; FULLDAYS = null; } if (STATE) render(); if (v) loadFullDays(); }
 async function tryUnlock(silent){
-  try { await api('auth', {}); try { ($('remember').checked || $('remember2').checked ? localStorage : sessionStorage).setItem('pw', PW); } catch(e){} setUnlocked(true); }
+  try { await api('auth', {}); try { ($('remember').checked ? localStorage : sessionStorage).setItem('pw', PW); } catch(e){} setUnlocked(true); }
   catch(e){ if (!silent) alert(e.message); PW = VPW; setUnlocked(false); }
 }
 if (API){
   $('admin').hidden = false; $('mDate').value = localISO(new Date());
-  $('dayAdmin').hidden = false; $('dDate').value = localISO(today < START ? START : new Date()); updDayNo();
-  $('unlock2').addEventListener('click', () => { PW = $('pw2').value; tryUnlock(false); });
-  $('pw2').addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); PW = $('pw2').value; tryUnlock(false); } });
+  $('dDate').value = localISO(today < START ? START : new Date()); updDayNo();
   $('unlock').addEventListener('click', () => { PW = $('pw').value; tryUnlock(false); });
   $('pw').addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); PW = $('pw').value; tryUnlock(false); } });
 }
@@ -418,12 +411,11 @@ function updDayNo(){
   const str = $('dDate').value; if (!str){ $('dNo').textContent = ''; return 0; }
   const n = dayNoOf(str); $('dNo').textContent = (n >= 1 && n <= 31) ? `D${n}` : `30 Days 기간(${fmt(START)}~${fmt(END)}) 밖의 날짜예요`; return n;
 }
-function clearForm(){ ['dTitle', 'dGood', 'dBad', 'dMood', 'dUrl', 'dPrompt', 'dTool'].forEach(id => $(id).value = ''); $('dPublic').checked = false; CURDAY = 0; SAVEDFOR = 0; renderMedia([]); }
+function clearForm(){ ['dNote', 'dMood', 'dPrompt'].forEach(id => $(id).value = ''); $('dPublic').checked = false; CURDAY = 0; SAVEDFOR = 0; renderMedia([]); }
 function fillForm(e){
   if (e.date) $('dDate').value = e.date;
-  $('dTitle').value = e.title && e.title !== 'D' + e.day ? e.title : ''; $('dGood').value = e.good || ''; $('dBad').value = e.bad || '';
-  $('dMood').value = e.mood ? String(e.mood) : ''; $('dUrl').value = e.url || ''; $('dPublic').checked = !!e.public;
-  $('dPrompt').value = e.prompt || ''; $('dTool').value = e.tool || '';
+  $('dNote').value = e.good || e.bad || ''; $('dMood').value = e.mood ? String(e.mood) : ''; $('dPublic').checked = !!e.public;
+  $('dPrompt').value = e.prompt || '';
   updDayNo();
 }
 function syncForm(){
@@ -435,14 +427,16 @@ async function loadFullDays(){
   if (!API || !UNLOCKED) return;
   try {
     FULLDAYS = (await api('daysFull', {})).days; render();
+    if ($('dayAdmin').hidden) return;
     const n = updDayNo(), ex = FULLDAYS.find(d => d.day === n);
-    if (ex && !$('dGood').value && !$('dBad').value){ fillForm(ex); dMsg(`D${n} 기록을 불러왔어요. 고치고 저장하면 덮어써요.`); }
+    if (ex && !$('dNote').value){ fillForm(ex); dMsg(`D${n} 기록을 불러왔어요. 고치고 저장하면 덮어써요.`); }
   } catch(e){ dMsg(e.message, 'err'); }
 }
+function closeDay(){ $('dayAdmin').hidden = true; }
 function openDay(dt, e){
-  $('dayAdmin').open = true; $('dDate').value = localISO(dt);
+  $('dayAdmin').hidden = false; $('dDate').value = localISO(dt);
   if (e){ fillForm(e); CURDAY = e.day; SAVEDFOR = e.day; refreshMedia(); } else { clearForm(); updDayNo(); }
-  dMsg(e ? `D${e.day} 기록을 불러왔어요. 고치고 저장하면 덮어써요.` : ''); $('dform').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  dMsg(e ? `D${e.day} 기록을 불러왔어요. 고치고 저장하면 덮어써요.` : ''); $('dayAdmin').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 function renderDays(){
   const list = curDays(), by = {}; list.forEach(d => by[d.day] = d); const grid = $('daysGrid'); grid.textContent = '';
@@ -453,8 +447,7 @@ function renderDays(){
     if (e){
       if (e.title && e.title !== 'D' + i){ if (e.url){ const a = el('a', null, e.title); a.href = e.url; c.appendChild(a); } else c.appendChild(el('span', null, e.title)); }
       else if (e.url){ const a = el('a', null, '보기'); a.href = e.url; c.appendChild(a); }
-      if (e.good) c.appendChild(el('div', 'pos', '＋ ' + e.good));
-      if (e.bad) c.appendChild(el('div', 'neg', '－ ' + e.bad));
+      if (e.good || e.bad) c.appendChild(el('div', 'pos', e.good || e.bad));
       if (e.note) c.appendChild(el('div', null, e.note));
       if (e.mood) c.appendChild(el('div', 'mood', `기분 ${e.mood}/5`));
       if (e.prompt) { const d = el('details', 'prompt'); const sm = el('summary', null, '프롬프트' + (e.tool ? ` · ${e.tool}` : '')); d.appendChild(sm); d.appendChild(el('pre', null, e.prompt)); c.appendChild(d); }
@@ -489,14 +482,14 @@ async function loadDayMedia(){
 }
 function currentDayFields(){
   const str = $('dDate').value, n = str ? dayNoOf(str) : 0;
-  return { str, n, good: $('dGood').value.trim(), bad: $('dBad').value.trim() };
+  return { str, n, note: $('dNote').value.trim() };
 }
 // 노션에 오늘 기록을 만들거나 갱신한다. text=false 면 지금 폼에 있는 내용 그대로 조용히 저장만 한다(파일 업로드 전 자동 생성용).
 async function saveDay(silent){
-  const { str, n, good, bad } = currentDayFields();
+  const { str, n, note } = currentDayFields();
   if (!str || n < 1 || n > 31){ dMsg(`날짜가 30 Days 기간(${fmt(START)}~${fmt(END)})이 아니에요.`, 'err'); return null; }
   if (!silent) dMsg('노션에 저장하는 중…');
-  const r = await api('daySave', { day: n, date: str, title: $('dTitle').value, good, bad, mood: $('dMood').value ? Number($('dMood').value) : null, url: $('dUrl').value, public: $('dPublic').checked, prompt: $('dPrompt').value, tool: $('dTool').value });
+  const r = await api('daySave', { day: n, date: str, title: '', good: note, bad: '', mood: $('dMood').value ? Number($('dMood').value) : null, url: '', public: $('dPublic').checked, prompt: $('dPrompt').value, tool: '' });
   CURDAY = n; SAVEDFOR = n;
   if (!silent) dMsg(`D${n} ${r.updated ? '수정' : '저장'}했어요. 노션에도 들어갔어요.`, 'ok');
   refreshMedia();
@@ -509,6 +502,7 @@ if (API){
     try { await saveDay(false); await loadFullDays(); await loadState(); }
     catch(e){ dMsg(e.message, 'err'); } finally { $('dSave').disabled = false; }
   });
+  $('dClose').addEventListener('click', closeDay);
 }
 
 // ===== 이미지·영상 업로드 =====
