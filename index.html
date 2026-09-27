@@ -126,6 +126,20 @@ body.locked .wrap,body.locked footer{display:none}
 #gate input[type=password]{width:100%;margin:0 0 12px}
 #gate button{width:100%}
 
+.mediaList{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;margin-top:10px}
+.mediaItem{position:relative;border:1px solid var(--line2);border-radius:10px;overflow:hidden;background:#05090c;aspect-ratio:1}
+.mediaItem img,.mediaItem video{width:100%;height:100%;object-fit:cover;display:block}
+.mediaItem .bar2{position:absolute;left:0;right:0;bottom:0;height:4px;background:rgba(255,255,255,.15)}
+.mediaItem .bar2 i{display:block;height:100%;background:var(--amber);width:0%;transition:width .2s}
+.mediaItem .x{position:absolute;top:4px;right:4px;background:rgba(5,10,15,.7);color:#fff;border:0;border-radius:99px;width:24px;height:24px;min-height:0;padding:0;line-height:24px;font-size:14px}
+.mediaItem .err{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(224,160,148,.15);color:var(--rose);font-size:11px;text-align:center;padding:4px}
+input[type=file]{font:inherit;color:var(--muted)}
+.dayMedia{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:6px;margin-top:8px;font-size:11px;color:var(--muted)}
+.dayMedia img,.dayMedia video{width:100%;border-radius:8px;display:block;background:#05090c}
+.dayMedia img{aspect-ratio:1;object-fit:cover}
+.prompt{margin-top:6px;font-size:12px}
+.prompt summary{cursor:pointer;color:var(--teal)}
+.prompt pre{margin:6px 0 0;font-size:11.5px}
 @media (max-width:560px){
   body{font-size:16px}
   .wrap{padding:0 18px}
@@ -214,10 +228,18 @@ body.locked .wrap,body.locked footer{display:none}
       <textarea id="dGood" rows="4" placeholder="오늘 좋았던 경험 (간단하게)"></textarea>
       <textarea id="dBad" rows="4" placeholder="오늘 힘들었거나 부정적이었던 경험 (간단하게)"></textarea>
       <div class="inline"><label class="muted">오늘의 기분 <select id="dMood" style="width:auto"><option value="">선택 안 함</option><option value="1">1 · 많이 힘듦</option><option value="2">2 · 힘든 편</option><option value="3">3 · 보통</option><option value="4">4 · 좋은 편</option><option value="5">5 · 아주 좋음</option></select></label></div>
-      <input type="text" id="dUrl" placeholder="오늘 만든 영상·사진 링크 (선택)">
+      <div class="inline"><input type="text" id="dTool" placeholder="사용한 AI 도구 (예: Higgsfield, Runway)" style="max-width:240px"></div>
+      <textarea id="dPrompt" rows="4" placeholder="오늘 쓴 프롬프트를 그대로 붙여넣어 주세요."></textarea>
+      <input type="text" id="dUrl" placeholder="오늘 만든 영상·사진 링크 (선택, 유튜브 등 외부 링크)">
       <label class="muted"><input type="checkbox" id="dPublic"> 사이트에 내용 공개 (끄면 내용은 노션과 이 화면의 나에게만 보이고, 사이트에는 "기록함"만 보여요)</label>
       <div class="inline"><button type="button" class="primary" id="dSave">노션에 저장</button></div>
       <div class="msg" id="dMsg" role="status" aria-live="polite"></div>
+      <div id="mediaBox" hidden>
+        <label class="muted" style="display:block;margin:4px 0 8px">이미지·영상 올리기 (노션 페이지에 저장돼요, 파일당 최대 100MB)</label>
+        <input type="file" id="dFile" accept="image/png,image/jpeg,image/gif,image/webp,video/mp4,video/quicktime,video/webm" multiple>
+        <div id="mediaList" class="mediaList"></div>
+        <div class="msg" id="uMsg" role="status" aria-live="polite"></div>
+      </div>
     </form>
   </details>
   <div class="days" id="daysGrid"></div></section>
@@ -396,11 +418,12 @@ function updDayNo(){
   const str = $('dDate').value; if (!str){ $('dNo').textContent = ''; return 0; }
   const n = dayNoOf(str); $('dNo').textContent = (n >= 1 && n <= 31) ? `D${n}` : `30 Days 기간(${fmt(START)}~${fmt(END)}) 밖의 날짜예요`; return n;
 }
-function clearForm(){ ['dTitle', 'dGood', 'dBad', 'dMood', 'dUrl'].forEach(id => $(id).value = ''); $('dPublic').checked = false; }
+function clearForm(){ ['dTitle', 'dGood', 'dBad', 'dMood', 'dUrl', 'dPrompt', 'dTool'].forEach(id => $(id).value = ''); $('dPublic').checked = false; CURDAY = 0; renderMedia([]); }
 function fillForm(e){
   if (e.date) $('dDate').value = e.date;
   $('dTitle').value = e.title && e.title !== 'D' + e.day ? e.title : ''; $('dGood').value = e.good || ''; $('dBad').value = e.bad || '';
   $('dMood').value = e.mood ? String(e.mood) : ''; $('dUrl').value = e.url || ''; $('dPublic').checked = !!e.public;
+  $('dPrompt').value = e.prompt || ''; $('dTool').value = e.tool || '';
   updDayNo();
 }
 function syncForm(){
@@ -433,7 +456,9 @@ function renderDays(){
       if (e.bad) c.appendChild(el('div', 'neg', '－ ' + e.bad));
       if (e.note) c.appendChild(el('div', null, e.note));
       if (e.mood) c.appendChild(el('div', 'mood', `기분 ${e.mood}/5`));
+      if (e.prompt) { const d = el('details', 'prompt'); const sm = el('summary', null, '프롬프트' + (e.tool ? ` · ${e.tool}` : '')); d.appendChild(sm); d.appendChild(el('pre', null, e.prompt)); c.appendChild(d); }
       if (e.public === false && !e.good && !e.bad) c.appendChild(el('div', 'mood', '기록함 · 비공개'));
+      if (e.media) { const mb = el('div', 'dayMedia'); mb.dataset.day = i; mb.textContent = `미디어 ${e.media}개 불러오는 중…`; c.appendChild(mb); }
     }
     if (UNLOCKED && STATE){
       c.setAttribute('role', 'button'); c.tabIndex = 0; c.title = e ? '눌러서 고치기' : '눌러서 이 날 기록 쓰기';
@@ -441,6 +466,24 @@ function renderDays(){
       c.addEventListener('click', open); c.addEventListener('keydown', ev => { if (ev.key === 'Enter'){ ev.preventDefault(); open(ev); } });
     }
     grid.appendChild(c);
+  }
+  loadDayMedia();
+}
+const mediaCache = {};
+async function loadDayMedia(){
+  for (const box of [...document.querySelectorAll('.dayMedia')]){
+    const day = Number(box.dataset.day);
+    try {
+      const media = mediaCache[day] || (mediaCache[day] = (await api('dayMedia', { day })).media);
+      box.textContent = '';
+      if (!media.length){ box.remove(); continue; }
+      media.forEach(m => {
+        const el2 = m.type === 'video' ? el('video') : el('img');
+        el2.src = m.url; el2.loading = 'lazy';
+        if (m.type === 'video'){ el2.controls = true; el2.preload = 'metadata'; } else { el2.alt = m.name || ''; }
+        box.appendChild(el2);
+      });
+    } catch(e){ box.textContent = '미디어를 불러오지 못했어요.'; }
   }
 }
 if (API){
@@ -454,10 +497,64 @@ if (API){
     try {
       const r = await api('daySave', { day: n, date: str, title: $('dTitle').value, good, bad, mood: $('dMood').value ? Number($('dMood').value) : null, url: $('dUrl').value, public: $('dPublic').checked });
       dMsg(`D${n} ${r.updated ? '수정' : '저장'}했어요. 노션에도 들어갔어요.`, 'ok');
+      CURDAY = n; $('mediaBox').hidden = false; refreshMedia();
       await loadFullDays(); await loadState();
     } catch(e){ dMsg(e.message, 'err'); } finally { $('dSave').disabled = false; }
   });
 }
+
+// ===== 이미지·영상 업로드 =====
+let CURDAY = 0;
+function uMsg(text, kind){ const m = $('uMsg'); if (m){ m.textContent = text || ''; m.className = 'msg' + (kind ? ' ' + kind : ''); } }
+function renderMedia(list){
+  const box = $('mediaList'); if (!box) return; box.textContent = '';
+  (list || []).forEach(m => {
+    const it = el('div', 'mediaItem');
+    const media = m.type === 'video' ? el('video') : el('img');
+    if (m.type === 'video'){ media.muted = true; media.controls = true; } else { media.alt = m.name || ''; }
+    media.src = m.url; it.appendChild(media);
+    const x = el('button', 'x', '×'); x.type = 'button'; x.title = '삭제';
+    x.addEventListener('click', async () => {
+      if (!confirm('이 파일을 삭제할까요? 노션에서도 지워져요.')) return;
+      x.disabled = true;
+      try { await api('mediaDelete', { day: CURDAY, blockId: m.id }); await refreshMedia(); }
+      catch(e){ alert(e.message); x.disabled = false; }
+    });
+    it.appendChild(x); box.appendChild(it);
+  });
+}
+async function refreshMedia(){
+  if (!CURDAY) return;
+  try { renderMedia((await api('dayMedia', { day: CURDAY })).media); } catch(e){ uMsg(e.message, 'err'); }
+}
+function fileToB64(blob){ return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result.split(',')[1]); r.onerror = rej; r.readAsDataURL(blob); }); }
+async function uploadOne(file, item){
+  const bar = item.querySelector('.bar2 i');
+  const CH = 4 * 1024 * 1024, parts = Math.max(1, Math.ceil(file.size / CH));
+  const { uploadId } = await api('mediaStart', { day: CURDAY, name: file.name, type: file.type, size: file.size, parts });
+  for (let i = 0; i < parts; i++){
+    const chunk = file.slice(i * CH, Math.min(file.size, (i + 1) * CH));
+    const data = await fileToB64(chunk);
+    await api('mediaPart', { day: CURDAY, uploadId, type: file.type, name: file.name, parts, partNumber: i + 1, data });
+    if (bar) bar.style.width = Math.round((i + 1) / parts * 100) + '%';
+  }
+  await api('mediaComplete', { day: CURDAY, uploadId, type: file.type, name: file.name, parts });
+}
+if ($('dFile')) $('dFile').addEventListener('change', async () => {
+  const files = [...$('dFile').files]; $('dFile').value = '';
+  if (!files.length) return;
+  if (!CURDAY){ uMsg('먼저 위에서 오늘 기록을 저장한 뒤에 파일을 올려 주세요.', 'err'); return; }
+  uMsg(`${files.length}개 올리는 중…`);
+  for (const file of files){
+    const it = el('div', 'mediaItem'); const bar = el('div', 'bar2'); bar.appendChild(el('i')); it.appendChild(bar); $('mediaList').appendChild(it);
+    try {
+      const media = file.type.startsWith('video') ? el('video') : el('img');
+      if (file.type.startsWith('video')) media.muted = true; media.src = URL.createObjectURL(file); it.insertBefore(media, bar);
+      await uploadOne(file, it);
+    } catch(e){ it.textContent = ''; const err = el('div', 'err', e.message); it.appendChild(err); uMsg(e.message, 'err'); continue; }
+  }
+  uMsg('완료했어요.', 'ok'); await refreshMedia();
+});
 if (!API || PW) loadState();
 
 // 세계관
