@@ -476,7 +476,9 @@ async function loadDayMedia(){
           api('dayMedia', { day }).catch(() => ({ media: [] })),
           api('dayDriveMedia', { day }).catch(() => ({ media: [] })),
         ]);
-        combo = mediaCache[day] = (n.media || []).map(m => ({ ...m, source: 'notion' })).concat((d.media || []).map(m => ({ ...m, source: 'drive' })));
+        const notionList = (n.media || []).map(m => ({ ...m, source: 'notion' }));
+        const driveList = (d.media || []).map(m => ({ ...m, source: 'drive' }));
+        combo = mediaCache[day] = driveList.length ? driveList : notionList.concat(driveList);
       }
       box.textContent = '';
       if (!combo.length){ box.remove(); continue; }
@@ -565,8 +567,9 @@ async function refreshMedia(){
       api('dayMedia', { day: CURDAY }).catch(() => ({ media: [] })),
       api('dayDriveMedia', { day: CURDAY }).catch(() => ({ media: [] })),
     ]);
-    const combo = (n.media || []).map(m => ({ ...m, source: 'notion' })).concat((d.media || []).map(m => ({ ...m, source: 'drive' })));
-    renderMedia(combo);
+    const notionList = (n.media || []).map(m => ({ ...m, source: 'notion' }));
+    const driveList = (d.media || []).map(m => ({ ...m, source: 'drive' }));
+    renderMedia(driveList.length ? driveList : notionList.concat(driveList));
   } catch(e){ uMsg(e.message, 'err'); }
 }
 function fileToB64(blob){ return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result.split(',')[1]); r.onerror = rej; r.readAsDataURL(blob); }); }
