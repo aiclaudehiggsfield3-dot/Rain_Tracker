@@ -137,6 +137,9 @@ input[type=file]{font:inherit;color:var(--muted)}
 .dayMedia{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:6px;margin-top:8px;font-size:11px;color:var(--muted)}
 .dayMedia img,.dayMedia video{width:100%;border-radius:8px;display:block;background:#05090c}
 .dayMedia img{aspect-ratio:1;object-fit:cover}
+.dayMedia .driveEmbed,.mediaItem.wide{grid-column:1/-1;aspect-ratio:16/9;border-radius:8px;overflow:hidden;background:#05090c}
+.dayMedia .driveEmbed iframe,.mediaItem.wide iframe{width:100%;height:100%;border:0;display:block}
+.mediaItem .srcTag{position:absolute;left:4px;bottom:4px;background:rgba(5,10,15,.7);color:#fff;font-size:9px;padding:2px 5px;border-radius:6px;z-index:2}
 .prompt{margin-top:6px;font-size:12px}
 .prompt summary{cursor:pointer;color:var(--teal)}
 .prompt pre{margin:6px 0 0;font-size:11.5px}
@@ -451,7 +454,7 @@ function renderDays(){
       if (e.mood) c.appendChild(el('div', 'mood', `기분 ${e.mood}/5`));
       if (e.prompt) { const d = el('details', 'prompt'); const sm = el('summary', null, '프롬프트' + (e.tool ? ` · ${e.tool}` : '')); d.appendChild(sm); d.appendChild(el('pre', null, e.prompt)); c.appendChild(d); }
       if (e.public === false && !e.good && !e.bad) c.appendChild(el('div', 'mood', '기록함 · 비공개'));
-      if (e.media) { const mb = el('div', 'dayMedia'); mb.dataset.day = i; mb.textContent = `미디어 ${e.media}개 불러오는 중…`; c.appendChild(mb); }
+      if (e.media || e.driveMedia) { const mb = el('div', 'dayMedia'); mb.dataset.day = i; mb.textContent = `미디어 ${(e.media || 0) + (e.driveMedia || 0)}개 불러오는 중…`; c.appendChild(mb); }
     }
     if (UNLOCKED && STATE){
       c.setAttribute('role', 'button'); c.tabIndex = 0; c.title = e ? '눌러서 고치기' : '눌러서 이 날 기록 쓰기';
@@ -467,10 +470,24 @@ async function loadDayMedia(){
   for (const box of [...document.querySelectorAll('.dayMedia')]){
     const day = Number(box.dataset.day);
     try {
-      const media = mediaCache[day] || (mediaCache[day] = (await api('dayMedia', { day })).media);
+      let combo = mediaCache[day];
+      if (!combo){
+        const [n, d] = await Promise.all([
+          api('dayMedia', { day }).catch(() => ({ media: [] })),
+          api('dayDriveMedia', { day }).catch(() => ({ media: [] })),
+        ]);
+        combo = mediaCache[day] = (n.media || []).map(m => ({ ...m, source: 'notion' })).concat((d.media || []).map(m => ({ ...m, source: 'drive' })));
+      }
       box.textContent = '';
-      if (!media.length){ box.remove(); continue; }
-      media.forEach(m => {
+      if (!combo.length){ box.remove(); continue; }
+      combo.forEach(m => {
+        if (m.source === 'drive'){
+          const wrap = el('div', 'driveEmbed');
+          const ifr = document.createElement('iframe');
+          ifr.src = 'https://drive.google.com/file/d/' + m.id + '/preview';
+          ifr.loading = 'lazy'; ifr.allow = 'autoplay';
+          wrap.appendChild(ifr); box.appendChild(wrap); return;
+        }
         const el2 = m.type === 'video' ? el('video') : el('img');
         el2.src = m.url; el2.loading = 'lazy';
         if (m.type === 'video'){ el2.controls = true; el2.preload = 'metadata'; } else { el2.alt = m.name || ''; }
@@ -516,23 +533,41 @@ function uMsg(text, kind){ const m = $('uMsg'); if (m){ m.textContent = text || 
 function renderMedia(list){
   const box = $('mediaList'); if (!box) return; box.textContent = '';
   (list || []).forEach(m => {
-    const it = el('div', 'mediaItem');
-    const media = m.type === 'video' ? el('video') : el('img');
-    if (m.type === 'video'){ media.muted = true; media.controls = true; } else { media.alt = m.name || ''; }
-    media.src = m.url; it.appendChild(media);
+    const it = el('div', 'mediaItem' + (m.source === 'drive' ? ' wide' : ''));
+    if (m.source === 'drive'){
+      const ifr = document.createElement('iframe');
+      ifr.src = 'https://drive.google.com/file/d/' + m.id + '/preview';
+      ifr.loading = 'lazy'; ifr.allow = 'autoplay';
+      it.appendChild(ifr);
+    } else {
+      const media = m.type === 'video' ? el('video') : el('img');
+      if (m.type === 'video'){ media.muted = true; media.controls = true; } else { media.alt = m.name || ''; }
+      media.src = m.url; it.appendChild(media);
+    }
+    it.appendChild(el('span', 'srcTag', m.source === 'drive' ? '드라이브' : '노션'));
     const x = el('button', 'x', '×'); x.type = 'button'; x.title = '삭제';
     x.addEventListener('click', async () => {
-      if (!confirm('이 파일을 삭제할까요? 노션에서도 지워져요.')) return;
+      if (!confirm('이 파일을 삭제할까요?')) return;
       x.disabled = true;
-      try { await api('mediaDelete', { day: CURDAY, blockId: m.id }); await refreshMedia(); }
-      catch(e){ alert(e.message); x.disabled = false; }
+      try {
+        if (m.source === 'drive') await api('driveMediaDelete', { day: CURDAY, fileId: m.id });
+        else await api('mediaDelete', { day: CURDAY, blockId: m.id });
+        await refreshMedia();
+      } catch(e){ alert(e.message); x.disabled = false; }
     });
     it.appendChild(x); box.appendChild(it);
   });
 }
 async function refreshMedia(){
   if (!CURDAY) return;
-  try { renderMedia((await api('dayMedia', { day: CURDAY })).media); } catch(e){ uMsg(e.message, 'err'); }
+  try {
+    const [n, d] = await Promise.all([
+      api('dayMedia', { day: CURDAY }).catch(() => ({ media: [] })),
+      api('dayDriveMedia', { day: CURDAY }).catch(() => ({ media: [] })),
+    ]);
+    const combo = (n.media || []).map(m => ({ ...m, source: 'notion' })).concat((d.media || []).map(m => ({ ...m, source: 'drive' })));
+    renderMedia(combo);
+  } catch(e){ uMsg(e.message, 'err'); }
 }
 function fileToB64(blob){ return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result.split(',')[1]); r.onerror = rej; r.readAsDataURL(blob); }); }
 async function uploadOne(file, item){
@@ -547,21 +582,36 @@ async function uploadOne(file, item){
   }
   await api('mediaComplete', { day: CURDAY, uploadId, type: file.type, name: file.name, parts });
 }
+// 같은 파일을 구글 드라이브에도 올린다(노션 업로드와 별개로 성공·실패한다. 대용량 영상은 노션 용량 제한에 걸릴 수 있어서 병행한다).
+async function driveUploadOne(file){
+  const CH = 4 * 1024 * 1024, parts = Math.max(1, Math.ceil(file.size / CH));
+  const { uploadId } = await api('driveMediaStart', { day: CURDAY, date: $('dDate').value, name: file.name, type: file.type, size: file.size });
+  for (let i = 0; i < parts; i++){
+    const chunk = file.slice(i * CH, Math.min(file.size, (i + 1) * CH));
+    const data = await fileToB64(chunk);
+    await api('driveMediaPart', { day: CURDAY, uploadId, partNumber: i + 1, data });
+  }
+  await api('driveMediaComplete', { day: CURDAY, uploadId });
+}
 if ($('dFile')) $('dFile').addEventListener('change', async () => {
   const files = [...$('dFile').files]; $('dFile').value = '';
   if (!files.length) return;
   uMsg('기록을 준비하는 중…');
   try { await ensureDayForUpload(); } catch(e){ uMsg(e.message, 'err'); return; }
-  uMsg(`${files.length}개 올리는 중…`);
+  uMsg(`${files.length}개 올리는 중… (노션·드라이브 둘 다 시도해요)`);
   for (const file of files){
     const it = el('div', 'mediaItem'); const bar = el('div', 'bar2'); bar.appendChild(el('i')); it.appendChild(bar); $('mediaList').appendChild(it);
-    try {
-      const media = file.type.startsWith('video') ? el('video') : el('img');
-      if (file.type.startsWith('video')) media.muted = true; media.src = URL.createObjectURL(file); it.insertBefore(media, bar);
-      await uploadOne(file, it);
-    } catch(e){ it.textContent = ''; const err = el('div', 'err', e.message); it.appendChild(err); uMsg(e.message, 'err'); continue; }
+    const media = file.type.startsWith('video') ? el('video') : el('img');
+    if (file.type.startsWith('video')) media.muted = true; media.src = URL.createObjectURL(file); it.insertBefore(media, bar);
+    const [notionR, driveR] = await Promise.allSettled([ uploadOne(file, it), driveUploadOne(file) ]);
+    it.remove();
+    const parts = [
+      '노션 ' + (notionR.status === 'fulfilled' ? '성공' : ('실패(' + notionR.reason.message + ')')),
+      '드라이브 ' + (driveR.status === 'fulfilled' ? '성공' : ('실패(' + driveR.reason.message + ')')),
+    ];
+    uMsg(file.name + ': ' + parts.join(' · '), (notionR.status === 'fulfilled' || driveR.status === 'fulfilled') ? 'ok' : 'err');
   }
-  uMsg('완료했어요.', 'ok'); await refreshMedia();
+  await refreshMedia();
 });
 if (!API || PW) loadState();
 
