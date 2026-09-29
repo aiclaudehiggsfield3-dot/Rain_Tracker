@@ -572,7 +572,7 @@ async function refreshMedia(){
 function fileToB64(blob){ return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result.split(',')[1]); r.onerror = rej; r.readAsDataURL(blob); }); }
 async function uploadOne(file, item){
   const bar = item.querySelector('.bar2 i');
-  const CH = 4 * 1024 * 1024, parts = Math.max(1, Math.ceil(file.size / CH));
+  const CH = 5 * 1024 * 1024, parts = Math.max(1, Math.ceil(file.size / CH));
   const { uploadId } = await api('mediaStart', { day: CURDAY, name: file.name, type: file.type, size: file.size, parts });
   for (let i = 0; i < parts; i++){
     const chunk = file.slice(i * CH, Math.min(file.size, (i + 1) * CH));
